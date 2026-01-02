@@ -1,0 +1,347 @@
+/**
+ * ProtocolHandler - Handles NOTCH protocol commands and responses
+ * Parses responses and provides convenient methods for common operations
+ */
+
+export class ProtocolHandler {
+  constructor(serialManager) {
+    this.serial = serialManager;
+  }
+
+  /**
+   * Parse a response line from the console
+   */
+  parseResponse(response) {
+    // Remove NULL bytes and other control characters (except newlines/returns which are already removed)
+    // Keep only printable ASCII and basic whitespace
+    const cleaned = response.replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]/g, '').trim();
+
+    console.log('parseResponse - cleaned:', JSON.stringify(cleaned));
+
+    // Check for OK response
+    if (cleaned.startsWith('OK')) {
+      const data = cleaned.substring(2).trim();
+      return {
+        success: true,
+        data: data.length > 0 ? data : null
+      };
+    }
+
+    // Check for ERROR response
+    if (cleaned.startsWith('ERROR')) {
+      const message = cleaned.substring(5).trim();
+      return {
+        success: false,
+        error: message || 'Unknown error'
+      };
+    }
+
+    // Unknown response format
+    console.error('Invalid response format:', cleaned);
+    return {
+      success: false,
+      error: `Invalid response format: "${cleaned}"`,
+      raw: cleaned
+    };
+  }
+
+  /**
+   * Send HANDSHAKE command
+   */
+  async handshake() {
+    try {
+      const response = await this.serial.sendCommandWithResponse('HANDSHAKE');
+      const parsed = this.parseResponse(response);
+
+      if (parsed.success) {
+        // Extract version from "OK NOTCH_READY v1.0.0"
+        const match = parsed.data ? parsed.data.match(/NOTCH_READY v([\d.]+)/) : null;
+        return {
+          success: true,
+          version: match ? match[1] : 'unknown'
+        };
+      }
+
+      return parsed;
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Send GET_INFO command
+   */
+  async getInfo() {
+    try {
+      const response = await this.serial.sendCommandWithResponse('GET_INFO');
+      console.log('GET_INFO response:', response);
+      const parsed = this.parseResponse(response);
+
+      if (parsed.success && parsed.data) {
+        try {
+          const info = JSON.parse(parsed.data);
+          return {
+            success: true,
+            info
+          };
+        } catch (jsonError) {
+          console.error('Failed to parse info JSON:', parsed.data);
+          return {
+            success: false,
+            error: `Failed to parse info JSON: ${parsed.data}`
+          };
+        }
+      }
+
+      return {
+        success: false,
+        error: parsed.error || 'GET_INFO command failed'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: `GET_INFO error: ${error.message}`
+      };
+    }
+  }
+
+  /**
+   * Send PING command
+   */
+  async ping() {
+    try {
+      const response = await this.serial.sendCommandWithResponse('PING');
+      const parsed = this.parseResponse(response);
+
+      return {
+        success: parsed.success && parsed.data === 'PONG'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Get console settings
+   */
+  async getSettings() {
+    try {
+      const response = await this.serial.sendCommandWithResponse('GET_SETTINGS');
+      const parsed = this.parseResponse(response);
+
+      if (parsed.success && parsed.data) {
+        try {
+          const settings = JSON.parse(parsed.data);
+          return {
+            success: true,
+            settings
+          };
+        } catch {
+          return {
+            success: false,
+            error: 'Failed to parse settings JSON'
+          };
+        }
+      }
+
+      return parsed;
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Set joystick sensitivity
+   */
+  async setJoySensitivity(value) {
+    try {
+      const response = await this.serial.sendCommandWithResponse(`SET_JOY_SENS ${value}`);
+      return this.parseResponse(response);
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Set LCD brightness
+   */
+  async setLCDBrightness(value) {
+    try {
+      const response = await this.serial.sendCommandWithResponse(`SET_LCD_BRIGHTNESS ${value}`);
+      return this.parseResponse(response);
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Set buzzer volume
+   */
+  async setBuzzerVolume(value) {
+    try {
+      const response = await this.serial.sendCommandWithResponse(`SET_BUZZER_VOLUME ${value}`);
+      return this.parseResponse(response);
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Save settings to EEPROM
+   */
+  async saveSettings() {
+    try {
+      const response = await this.serial.sendCommandWithResponse('SAVE_SETTINGS');
+      return this.parseResponse(response);
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Get console statistics
+   */
+  async getStats() {
+    try {
+      const response = await this.serial.sendCommandWithResponse('GET_STATS');
+      const parsed = this.parseResponse(response);
+
+      if (parsed.success && parsed.data) {
+        try {
+          const stats = JSON.parse(parsed.data);
+          return {
+            success: true,
+            stats
+          };
+        } catch {
+          return {
+            success: false,
+            error: 'Failed to parse stats JSON'
+          };
+        }
+      }
+
+      return parsed;
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Get memory information
+   */
+  async getMemory() {
+    try {
+      const response = await this.serial.sendCommandWithResponse('GET_MEMORY');
+      const parsed = this.parseResponse(response);
+
+      if (parsed.success && parsed.data) {
+        try {
+          const memory = JSON.parse(parsed.data);
+          return {
+            success: true,
+            memory
+          };
+        } catch {
+          return {
+            success: false,
+            error: 'Failed to parse memory JSON'
+          };
+        }
+      }
+
+      return parsed;
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Enable menu mode (skip tutorial on next boot)
+   */
+  async enableMenuMode() {
+    try {
+      const response = await this.serial.sendCommandWithResponse('ENABLE_MENU_MODE');
+      return this.parseResponse(response);
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Open main menu on console
+   */
+  async openMenu() {
+    try {
+      const response = await this.serial.sendCommandWithResponse('OPEN_MENU');
+      return this.parseResponse(response);
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Install menu to console (can be empty menu without games)
+   */
+  async installMenu() {
+    try {
+      // Send INSTALL_MENU command with empty data (no games)
+      const response = await this.serial.sendCommandWithResponse('INSTALL_MENU ');
+      return this.parseResponse(response);
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Install a single game to console
+   * @param {string} gameData - Game data in format "id:name" (e.g., "1:Snake")
+   */
+  async installGame(gameData) {
+    try {
+      const response = await this.serial.sendCommandWithResponse(`INSTALL_GAME ${gameData}`);
+      return this.parseResponse(response);
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+}
